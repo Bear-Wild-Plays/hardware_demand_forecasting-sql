@@ -1,10 +1,9 @@
 import sqlite3
 import pandas as pd
-import numpy as np
 from statsmodels.tsa.holtwinters import ExponentialSmoothing
 from sklearn.metrics import mean_absolute_percentage_error
 
-DB_PATH = "data/hardware_supply_chain.db"
+DB_PATH = "data/smurf_village_supply_chain.db"
 
 
 def run_sql_kpi_audit(conn: sqlite3.Connection) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -12,7 +11,6 @@ def run_sql_kpi_audit(conn: sqlite3.Connection) -> tuple[pd.DataFrame, pd.DataFr
     with open("sql/demand_kpis.sql", "r", encoding="utf-8") as f:
         raw_sql = f.read()
 
-    # Split statements safely
     statements = [s.strip() for s in raw_sql.split(";") if s.strip() and not s.strip().startswith("--")]
     accuracy_df = pd.read_sql_query(statements[0], conn)
     inventory_df = pd.read_sql_query(statements[1], conn)
@@ -31,7 +29,7 @@ def generate_statistical_forecast(conn: sqlite3.Connection, sku_id: str, horizon
     df["week_start_date"] = pd.to_datetime(df["week_start_date"])
     df = df.set_index("week_start_date").asfreq("W-MON")
 
-    # Train/Test split (hold out last 12 weeks for out-of-sample backtesting)
+    # Hold out last 12 weeks for out-of-sample backtesting
     train = df["actual_pos_units"].iloc[:-horizon_weeks]
     test = df["actual_pos_units"].iloc[-horizon_weeks:]
 
@@ -61,8 +59,8 @@ def generate_statistical_forecast(conn: sqlite3.Connection, sku_id: str, horizon
         "forecast_week": future_baseline.index.strftime("%Y-%m-%d"),
         "sku_id": sku_id,
         "baseline_stat_forecast": future_baseline.values,
-        "upside_promo_scenario_plus_25pct": (future_baseline.values * 1.25).round().astype(int),
-        "supply_constrained_scenario_minus_15pct": (future_baseline.values * 0.85).round().astype(int),
+        "smurfberry_festival_lift_plus_25pct": (future_baseline.values * 1.25).round().astype(int),
+        "gargamel_route_disruption_minus_15pct": (future_baseline.values * 0.85).round().astype(int),
         "backtest_holdout_mape_pct": round(holdout_mape, 2),
     })
     return forecast_df
@@ -75,12 +73,12 @@ if __name__ == "__main__":
     print("\n=== QTD FORECAST ACCURACY & BIAS (SQL OUTPUT) ===")
     print(accuracy_df.to_string(index=False))
 
-    print("\n=== CHANNEL INVENTORY & WEEKS-OF-SUPPLY EXCEPTIONS (SQL OUTPUT) ===")
+    print("\n=== CELLAR INVENTORY & WEEKS-OF-SUPPLY EXCEPTIONS (SQL OUTPUT) ===")
     print(inventory_df.to_string(index=False))
 
-    print("\n=== 12-WEEK STATISTICAL FORECAST & SCENARIO SENSITIVITY (HW-VR-PRO-256) ===")
-    fcst = generate_statistical_forecast(conn, "HW-VR-PRO-256", horizon_weeks=12)
+    print("\n=== 12-WEEK STATISTICAL FORECAST & SCENARIO SENSITIVITY (SMF-BRY-PRO-256) ===")
+    fcst = generate_statistical_forecast(conn, "SMF-BRY-PRO-256", horizon_weeks=12)
     print(fcst.to_string(index=False))
 
-    fcst.to_csv("data/vr_pro_12wk_forecast_scenarios.csv", index=False)
+    fcst.to_csv("data/smurfberry_12wk_forecast_scenarios.csv", index=False)
     conn.close()
